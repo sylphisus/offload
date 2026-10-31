@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>offload</title>
+<style>
+  :root {
+    --bg: #0a0a0f; --fg: #f3f3f7; --dim: #8b8ba3; --faint: #24243200; --line: #23232f;
+    --z: #ff4f9a; --x: #3fc6ff; --n: #c6c6d8; --great: #7dffa8; --good: #ffd54f; --meh: #ff9b5c; --slow: #ff5d6c;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: radial-gradient(900px 520px at 50% 38%, #171725, transparent 70%), var(--bg);
+    color: var(--fg);
+    font: 16px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex; flex-direction: column; overflow: hidden; user-select: none;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 24px; font-size: 13px; color: var(--dim);
+  }
+  header .left, header .right { display: flex; gap: 18px; align-items: center; }
+  .brand { color: var(--fg); font-weight: 600; letter-spacing: .02em; }
+  #combo { font-size: 15px; color: var(--fg); font-weight: 700; display: inline-block; min-width: 3ch; }
+  #dot { width: 8px; height: 8px; border-radius: 50%; background: var(--slow); display: inline-block; margin-right: 6px; }
+  #dot.on { background: var(--great); box-shadow: 0 0 8px var(--great); }
+
+  #stage {
+    flex: 1; display: grid; place-items: center; padding: 0 24px; position: relative; min-height: 0;
+  }
+  #stage > * { grid-area: 1 / 1; }
+  /* Small type and a narrow measure: the whole question lands in one glance. */
+  .card { width: min(640px, 100%); text-align: center; }
+  .meta { display: flex; justify-content: center; gap: 10px; font-size: 12px; color: var(--dim); margin-bottom: 12px; }
+  .chip { padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; }
+  .chip.perm { border-color: #ffd54f55; color: var(--good); }
+  .q {
+    font-size: 20px; font-weight: 600; line-height: 1.3;
+    overflow-wrap: anywhere;
+  }
+  .q.long { font-size: 17px; }
+  .q.cmd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 500; font-size: 16px; }
+  .ctx { margin-top: 8px; color: var(--dim); font-size: 14px; }
+  .card.locked .q { opacity: .55; }
+  .q { transition: opacity .2s; }
+
+  #idle { text-align: center; color: var(--dim); }
+  #idle .ring {
+    width: 120px; height: 120px; margin: 0 auto 22px; border-radius: 50%;
+    border: 2px solid #ffffff22; animation: breathe 2.6s ease-in-out infinite;
+  }
+  @keyframes breathe { 50% { transform: scale(.82); border-color: #ffffff44; } }
+  #idle b { color: var(--fg); font-weight: 600; display: block; font-size: 20px; margin-bottom: 6px; }
+
+  #pads { display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; padding: 0 24px; width: min(688px, 100%); margin: 0 auto; }
+  .pad {
+    position: relative; overflow: visible;
+    display: flex; align-items: center; gap: 12px; padding: 14px 16px;
+    background: #12121b; border: 1px solid var(--line); border-radius: 14px;
+    color: var(--fg); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; text-align: left;
+    transition: transform .08s, border-color .15s, background .15s, opacity .15s;
+  }
+  .pad[data-k="2"] { color: var(--dim); font-size: 14px; font-weight: 500; }
+  .pad[data-k="2"] .label { flex: none; overflow: visible; }
+  .pad .label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pad kbd {
+    font: 700 14px ui-monospace, SFMono-Regular, Menlo, monospace;
+    width: 32px; height: 32px; display: grid; place-items: center; border-radius: 9px; flex: none;
+    background: #1c1c28; border: 1px solid #ffffff1a; border-bottom-width: 3px;
+  }
+  .pad[data-k="0"] kbd { color: var(--z); }
+  .pad[data-k="1"] kbd { color: var(--x); }
+  .pad[data-k="2"] kbd { color: var(--n); }
+  .pad[data-k="0"]:hover:not(:disabled) { border-color: #ff4f9a66; }
+  .pad[data-k="1"]:hover:not(:disabled) { border-color: #3fc6ff66; }
+  .pad[data-k="2"]:hover:not(:disabled) { border-color: #c6c6d866; }
+  .pad:disabled { opacity: .35; cursor: default; }
+  .pad.hit { transform: scale(.97); }
+  .pad.hit[data-k="0"] { background: #ff4f9a22; border-color: var(--z); }
+  .pad.hit[data-k="1"] { background: #3fc6ff22; border-color: var(--x); }
+  .pad.hit[data-k="2"] { background: #c6c6d81a; border-color: var(--n); }
+  .chip.retake { border-color: #c6c6d855; color: var(--n); }
+  .burst {
+    position: absolute; left: 50%; top: 50%; width: 140px; height: 140px; margin: -70px 0 0 -70px;
+    border-radius: 50%; border: 3px solid; pointer-events: none;
+  }
+  .judge {
+    position: absolute; left: 0; right: 0; top: -8px; text-align: center; pointer-events: none;
+    font: 800 20px ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  #next { width: min(688px, 100%); margin: 18px auto 0; padding: 0 24px; min-height: 76px; }
+  #next div { font-size: 13px; color: #5d5d74; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 2px 0; }
+  #next div span { color: #44445a; }
+
+  footer {
+    display: flex; gap: 8px; padding: 14px 24px 18px; overflow: hidden; border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--dim); align-items: center; min-height: 52px;
+  }
+  footer .h { padding: 4px 10px; border-radius: 999px; background: #15151f; white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; flex: none; }
+  footer .h.z { box-shadow: inset 2px 0 0 var(--z); }
+  footer .h.x { box-shadow: inset 2px 0 0 var(--x); }
+  footer .h.n { box-shadow: inset 2px 0 0 var(--n); }
+  footer .hint { margin-left: auto; flex: none; color: #55556b; }
+
+  @media (max-width: 600px) {
+    header { padding: 12px 16px; } #stage, #pads, #next { padding-left: 16px; padding-right: 16px; }
+    #pads { gap: 8px; }
+    .pad { padding: 12px 10px; gap: 8px; }
+    .pad kbd { width: 28px; height: 28px; font-size: 13px; }
+    footer .hint { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="left">
+    <span class="brand">offload</span>
+    <span>combo <span id="combo" class="mono">0</span></span>
+    <span class="mono" id="avg"></span>
+  </div>
+  <div class="right">
+    <span id="waiting" class="mono">0 waiting</span>
+    <span><i id="dot"></i><span id="conn">connecting</span></span>
+  </div>
+</header>
+
+<main id="stage">
+  <div id="idle">
+    <div class="ring"></div>
+    <b>Nothing to decide</b>
+    Questions from your agents show up here.
+  </div>
+  <div class="card" id="card" hidden>
+    <div class="meta"><span class="chip" id="source"></span><span class="chip retake" id="retake" hidden></span><span class="chip mono" id="age"></span></div>
+    <div class="q" id="q"></div>
+    <div class="ctx" id="ctx"></div>
+  </div>
+</main>
+
+<section id="pads">
+  <button class="pad" data-k="0" id="pad0" disabled><kbd>Z</kbd><span class="label">—</span></button>
+  <button class="pad" data-k="1" id="pad1" disabled><kbd>X</kbd><span class="label">—</span></button>
+  <button class="pad" data-k="2" id="pad2" disabled><kbd>C</kbd><span class="label">neither</span></button>
+</section>
+<section id="next"></section>
+
+<footer id="hist"><span class="hint mono">Z X C or , . / · M mute</span></footer>
+
+<script>
+const $ = s => document.querySelector(s);
+const pads = [$('#pad0'), $('#pad1'), $('#pad2')];
+const PAD_COLORS = ['var(--z)', 'var(--x)', 'var(--n)'];
+const INPUT_LOCK_MS = 250;   // a new card can't be answered until you've had a glance at it
+const COMBO_BREAK_MS = 10000;
+
+let queue = [];
+const answered = new Set();
+let current = null, shownAt = 0, lockUntil = 0;
+let combo = 0;
+const times = [];
+let muted = false;
+try { muted = localStorage.getItem('offload.muted') === '1'; } catch {}
+
+// ── sound ────────────────────────────────────────────────
+let ac;
+function tone(freq, dur = 0.06, type = 'triangle', gain = 0.12, slideTo) {
+  if (muted) return;
+  try {
+    ac ??= new AudioContext();
+    const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(gain, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(ac.destination);
+    o.start(t); o.stop(t + dur);
+  } catch {}
+}
+
+// ── server ───────────────────────────────────────────────
+const es = new EventSource('/events');
+es.onopen = () => { $('#dot').className = 'on'; $('#conn').textContent = 'connected'; };
+es.onerror = () => { $('#dot').className = ''; $('#conn').textContent = 'offline'; };
+es.onmessage = e => {
+  const wasEmpty = visible().length === 0;
+  queue = JSON.parse(e.data).queue;
+  for (const id of answered) if (!queue.some(q => q.id === id)) answered.delete(id);
+  render();
+  if (wasEmpty && visible().length) tone(520, 0.14, 'sine', 0.08, 780);
+};
+
+const visible = () => queue.filter(q => !answered.has(q.id));
+
+// ── render ───────────────────────────────────────────────
+function render() {
+  const v = visible();
+  const head = v[0] ?? null;
+  if (head?.id !== current?.id) { current = head; showCard(); }
+
+  $('#waiting').textContent = `${v.length} waiting`;
+  document.title = v.length ? `(${v.length}) offload` : 'offload';
+
+  const next = $('#next');
+  next.replaceChildren(...v.slice(1, 4).map(q => {
+    const d = document.createElement('div');
+    d.innerHTML = `<span></span> `;
+    d.firstChild.textContent = q.source ? `${q.source} ·` : '';
+    d.append(q.question);
+    return d;
+  }));
+  if (v.length > 4) {
+    const d = document.createElement('div');
+    d.textContent = `+${v.length - 4} more`;
+    next.append(d);
+  }
+}
+
+function showCard() {
+  const card = $('#card');
+  if (!current) {
+    card.hidden = true; $('#idle').hidden = false;
+    pads.forEach(p => p.disabled = true);
+    pads.slice(0, 2).forEach(p => p.querySelector('.label').textContent = '—');
+    return;
+  }
+  $('#idle').hidden = true; card.hidden = false;
+  const q = $('#q');
+  q.textContent = current.question;
+  q.className = 'q' + (current.question.length > 90 ? ' long' : '') + (current.kind === 'permission' ? ' cmd' : '');
+  $('#ctx').textContent = current.context || '';
+  const src = $('#source');
+  src.textContent = [current.source, current.kind === 'permission' ? 'permission' : ''].filter(Boolean).join(' · ') || 'agent';
+  src.className = 'chip' + (current.kind === 'permission' ? ' perm' : '');
+  const retake = $('#retake');
+  retake.hidden = !current.revision;
+  retake.textContent = `take ${current.revision + 1}`;
+  tickAge();
+  pads.forEach(p => p.disabled = false);
+  pads.forEach((p, i) => p.querySelector('.label').textContent = labelFor(current, i));
+
+  shownAt = performance.now();
+  lockUntil = shownAt + INPUT_LOCK_MS;
+  card.classList.add('locked');
+  setTimeout(() => card.classList.remove('locked'), INPUT_LOCK_MS);
+  card.animate(
+    [{ opacity: 0, transform: 'translateY(14px) scale(.98)' }, { opacity: 1, transform: 'none' }],
+    { duration: 200, easing: 'cubic-bezier(.2,.8,.2,1)' },
+  );
+}
+
+// Pad 2 rejects both options; on a permission prompt it means "deny, try another way".
+const labelFor = (item, i) => i < 2 ? item.options[i] : item.kind === 'permission' ? 'rethink' : 'neither';
+
+function tickAge() {
+  if (!current) return;
+  const s = Math.max(0, Math.floor((Date.now() - current.createdAt) / 1000));
+  $('#age').textContent = s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+setInterval(tickAge, 1000);
+
+// ── answering ────────────────────────────────────────────
+function answer(index) {
+  if (!current || performance.now() < lockUntil) return;
+  const item = current;
+  const rt = performance.now() - shownAt;
+  answered.add(item.id);
+
+  fetch('/answer', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id: item.id, index }),
+  }).then(r => {
+    // 404 means the agent already gave up on it; anything else is a real failure.
+    if (!r.ok && r.status !== 404) throw new Error(r.status);
+  }).catch(() => { answered.delete(item.id); render(); });
+
+  feedback(index, rt, item);
+  render();
+}
+
+function feedback(index, rt, item) {
+  const pad = pads[index];
+  const color = PAD_COLORS[index];
+  tone([880, 660, 330][index], index === 2 ? 0.1 : 0.06);
+
+  pad.classList.add('hit');
+  setTimeout(() => pad.classList.remove('hit'), 110);
+
+  const burst = document.createElement('div');
+  burst.className = 'burst';
+  burst.style.borderColor = color;
+  pad.append(burst);
+  burst.animate(
+    [{ transform: 'scale(.4)', opacity: 0.9 }, { transform: 'scale(1.7)', opacity: 0 }],
+    { duration: 380, easing: 'cubic-bezier(.1,.7,.3,1)' },
+  ).onfinish = () => burst.remove();
+
+  const tier = rt < 1500 ? 'great' : rt < 4000 ? 'good' : rt < COMBO_BREAK_MS ? 'meh' : 'slow';
+  const judge = document.createElement('div');
+  judge.className = 'judge';
+  judge.style.color = `var(--${tier})`;
+  judge.textContent = rt < 1000 ? `${Math.round(rt)}ms` : `${(rt / 1000).toFixed(1)}s`;
+  pad.append(judge);
+  judge.animate(
+    [{ transform: 'translateY(0)', opacity: 1 }, { transform: 'translateY(-34px)', opacity: 0 }],
+    { duration: 650, easing: 'ease-out' },
+  ).onfinish = () => judge.remove();
+
+  // Fling the answered card toward the side that was chosen; a rejected card sinks.
+  const card = $('#card');
+  const ghost = card.cloneNode(true);
+  ghost.removeAttribute('id');
+  ghost.querySelectorAll('[id]').forEach(n => n.removeAttribute('id'));
+  ghost.style.pointerEvents = 'none';
+  $('#stage').append(ghost);
+  ghost.animate(
+    [{ transform: 'none', opacity: 1 }, {
+      transform: ['translateX(-90px) scale(.95)', 'translateX(90px) scale(.95)', 'translateY(70px) scale(.9)'][index],
+      opacity: 0,
+    }],
+    { duration: 220, easing: 'ease-in' },
+  ).onfinish = () => ghost.remove();
+
+  combo = rt < COMBO_BREAK_MS ? combo + 1 : 0;
+  const c = $('#combo');
+  c.textContent = combo ? `×${combo}` : '0';
+  c.animate([{ transform: 'scale(1.35)' }, { transform: 'scale(1)' }], { duration: 160 });
+
+  times.push(rt);
+  if (times.length > 20) times.shift();
+  const avg = times.reduce((a, b) => a + b, 0) / times.length;
+  $('#avg').textContent = `avg ${avg < 1000 ? Math.round(avg) + 'ms' : (avg / 1000).toFixed(1) + 's'}`;
+
+  const h = document.createElement('span');
+  h.className = 'h ' + ['z', 'x', 'n'][index];
+  h.textContent = `${labelFor(item, index)} · ${item.question}`;
+  h.title = item.question;
+  const hist = $('#hist');
+  hist.insertBefore(h, hist.firstChild);
+  [...hist.querySelectorAll('.h')].slice(12).forEach(n => n.remove());
+}
+
+// ── input ────────────────────────────────────────────────
+addEventListener('keydown', e => {
+  if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  // Left hand Z X C, right hand , . / (unshifted only).
+  if (k === 'z' || k === ',') answer(0);
+  else if (k === 'x' || k === '.') answer(1);
+  else if (k === 'c' || k === '/') { e.preventDefault(); answer(2); }
+  else if (k === 'm') {
+    muted = !muted;
+    try { localStorage.setItem('offload.muted', muted ? '1' : '0'); } catch {}
+  }
+});
+pads.forEach((p, i) => p.addEventListener('pointerdown', e => { e.preventDefault(); answer(i); }));
+</script>
+</body>
+</html>

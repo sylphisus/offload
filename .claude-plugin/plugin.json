@@ -1,0 +1,11 @@
+{
+  "name": "offload",
+  "version": "0.1.0",
+  "description": "Answer your agents' decisions one keypress at a time, in a pane beside the chat",
+  "author": { "name": "sylphisus" },
+  "homepage": "https://github.com/sylphisus/offload",
+  "repository": "https://github.com/sylphisus/offload",
+  "license": "MIT",
+  "keywords": ["decisions", "permissions", "pane", "keyboard"],
+  "types": "./types/index.d.ts"
+}

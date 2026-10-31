@@ -1,0 +1,6 @@
+{
+  "name": "offload",
+  "description": "offload: answer your agents' decisions one keypress at a time",
+  "owner": { "name": "sylphisus" },
+  "plugins": [{ "name": "offload", "source": "./", "description": "Answer your agents' decisions one keypress at a time, in a pane beside the chat" }]
+}
